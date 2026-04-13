@@ -1,0 +1,60 @@
+name: Deploy Self-Hosted
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-selfhost
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DEPLOY_HOST: 195.209.219.177
+  DEPLOY_USER: ubuntu
+  DEPLOY_PORT: "22"
+  DEPLOY_PATH: /opt/multica
+  DEPLOY_BRANCH: main
+  REPO_URL: https://github.com/dimkk/multica.git
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Prepare SSH
+        shell: bash
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          test -n "$DEPLOY_SSH_KEY"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload deploy script
+        shell: bash
+        run: |
+          scp -P "$DEPLOY_PORT" -i ~/.ssh/deploy_key \
+            scripts/deploy/remote-deploy.sh \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/multica-remote-deploy.sh"
+
+      - name: Deploy on server
+        shell: bash
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          ssh -p "$DEPLOY_PORT" -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "chmod +x /tmp/multica-remote-deploy.sh && \
+             DEPLOY_PATH='${DEPLOY_PATH}' \
+             DEPLOY_BRANCH='${DEPLOY_BRANCH}' \
+             REPO_URL='${REPO_URL}' \
+             GITHUB_SHA='${GITHUB_SHA}' \
+             /tmp/multica-remote-deploy.sh"
