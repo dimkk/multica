@@ -1,52 +1,131 @@
-# Self-Hosted Server Deploy
+# Self-Hosted Production Notes
 
-This repository now includes an IP-based self-hosted deployment path for:
+Current production instance:
 
-- host: `195.209.219.177`
-- user: `ubuntu`
-- app path: `/opt/multica`
-- deploy trigger: every push to `main`
+- app URL: `http://195.209.212.86:3000`
+- API URL: `http://195.209.212.86:8080`
+- server name: `multica-main-02`
+- owner: `d-volkovsky@yandex.ru`
 
-## First server bootstrap
+## Current deployment model
 
-Run on the server after SSH access is working:
+Production updates from `main` are currently **pull-based on the server**, not SSH-pushed from GitHub Actions.
+
+The server was bootstrapped with:
+
+- repo checkout in `/opt/multica`
+- sync script: `/usr/local/bin/multica-sync.sh`
+- timer: `multica-sync.timer`
+
+Behavior:
+
+1. changes land in `main`
+2. the server polls `origin/main` every 2 minutes
+3. if `HEAD` changed, it runs:
 
 ```bash
-cd /tmp
-git clone https://github.com/dimkk/multica.git
-cd multica
-bash scripts/deploy/bootstrap-ubuntu.sh
+git reset --hard origin/main
+docker compose -f docker-compose.selfhost.yml up -d --build --remove-orphans
 ```
 
-The bootstrap script:
+This is the production update path in use today.
 
-- installs Docker and Docker Compose if missing
-- clones the repo into `/opt/multica`
-- creates `/opt/multica/.env` from `deploy/selfhost.server.env.example`
-- generates a random `JWT_SECRET`
-- starts `docker-compose.selfhost.yml`
+## GitHub workflow status
 
-Before exposing the instance publicly, update `/opt/multica/.env`:
+`.github/workflows/deploy-selfhost.yml` is kept as an **SSH fallback/manual workflow** for later use.
 
-- set a strong `POSTGRES_PASSWORD`
-- configure `RESEND_*` or keep the server in non-production mode
-- move to HTTPS + domain before setting `APP_ENV=production`
+It is **not** the active production path right now, because inbound SSH to the running VM is not reliable enough for unattended GitHub Actions deploys.
 
-## GitHub Actions secret
+## Production mode
 
-The workflow `.github/workflows/deploy-selfhost.yml` expects one repository secret:
+`APP_ENV=production` is **not enabled yet on the live server**.
 
-- `DEPLOY_SSH_KEY`: private SSH key allowed to log into `ubuntu@195.209.219.177`
+Reason:
 
-The public key for that secret must be present in `~ubuntu/.ssh/authorized_keys` on the server.
+- current access is plain HTTP by IP
+- in production mode Multica sets `Secure` auth cookies
+- with plain HTTP, browser login would stop working
 
-## Deploy flow
+Enable production mode only after the Yandex gateway / reverse proxy is in place and HTTPS is working.
 
-On every push to `main`, GitHub Actions:
+Cutover checklist for later:
 
-1. connects to `195.209.219.177`
-2. uploads `scripts/deploy/remote-deploy.sh`
-3. fetches the latest `main`
-4. resets the server checkout to the pushed commit
-5. runs `docker compose -f docker-compose.selfhost.yml up -d --build --remove-orphans`
-6. verifies `http://127.0.0.1:8080/health`
+1. publish the app behind HTTPS
+2. set `FRONTEND_ORIGIN`, `MULTICA_APP_URL`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_WS_URL` to the final public URLs
+3. configure `RESEND_*` for email auth
+4. set `APP_ENV=production`
+5. rebuild the stack
+
+## Add Another Runtime
+
+Each additional runtime is installed on a separate machine and connects back to this server.
+
+### macOS / Linux
+
+Install prerequisites:
+
+- `codex` on `PATH`
+- `multica` CLI
+
+CLI install:
+
+```bash
+brew tap multica-ai/tap
+brew install multica
+```
+
+Point the CLI to this server:
+
+```bash
+multica config set app_url http://195.209.212.86:3000
+multica config set server_url http://195.209.212.86:8080
+```
+
+Authenticate and register the runtime:
+
+```bash
+multica login
+multica daemon start
+```
+
+Login details for the current non-production deployment:
+
+- email: the operator's email
+- verification code: `888888`
+
+Verify:
+
+```bash
+multica daemon status
+```
+
+The runtime should appear in:
+
+- `Settings -> Runtimes`
+
+### Windows
+
+There is no official Windows release artifact in this repo today.
+
+Use one of these options:
+
+1. run the runtime from WSL2 and follow the Linux steps
+2. build `multica.exe` locally from source and then run the same `config set`, `login`, and `daemon start` commands
+
+## Team Workflow
+
+Current operating model:
+
+1. developers open `http://195.209.212.86:3000`
+2. create or join the workspace owned by `d-volkovsky@yandex.ru`
+3. each machine that should execute agent work installs `codex` + `multica`
+4. that machine runs `multica daemon start` and becomes a runtime
+5. in the UI, create an agent and bind it to the runtime
+6. create issues and assign them to the agent
+7. the runtime daemon picks tasks up automatically
+8. when code is merged to `main`, production updates automatically within about 2 minutes
+
+## Notes
+
+- current runtime owner was verified through the API: `d-volkovsky@yandex.ru` is already the workspace `owner`
+- current production health check: `http://195.209.212.86:8080/health`

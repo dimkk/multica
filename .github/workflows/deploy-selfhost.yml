@@ -1,8 +1,6 @@
-name: Deploy Self-Hosted
+name: Deploy Self-Hosted (SSH Fallback)
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -13,7 +11,7 @@ permissions:
   contents: read
 
 env:
-  DEPLOY_HOST: 195.209.219.177
+  DEPLOY_HOST: 195.209.212.86
   DEPLOY_USER: ubuntu
   DEPLOY_PORT: "22"
   DEPLOY_PATH: /opt/multica
@@ -23,7 +21,6 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
     steps:
       - name: Checkout
         uses: actions/checkout@v6
