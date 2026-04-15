@@ -61,7 +61,7 @@ Recommended `.env.caddy` values for the live host:
 ```bash
 PUBLIC_DOMAIN=app.aiathome.ru
 LETSENCRYPT_EMAIL=d-volkovsky@yandex.ru
-SSH_TUNNEL_PATH_PREFIX=multica-ssh
+SSH_TUNNEL_DOMAIN=ssh.aiathome.ru
 APP_ENV=production
 MASTER_LOGIN_CODE=
 FRONTEND_ORIGIN=https://app.aiathome.ru
@@ -77,7 +77,7 @@ NEXT_PUBLIC_WS_URL=
 Notes:
 
 - Caddy terminates TLS and routes `/api`, `/auth`, `/health`, `/ws`, and `/uploads` to the backend
-- `/multica-ssh` is reserved for the SSH-over-TLS tunnel when `wstunnel` is enabled
+- `ssh.aiathome.ru` is reserved for the operator SSH-over-TLS tunnel when `wstunnel` is enabled
 - everything else goes to the frontend
 - leave `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_WS_URL` empty so the frontend stays same-origin under the current host
 - Let's Encrypt uses the HTTP challenge, so port `80` must remain publicly reachable
@@ -143,7 +143,7 @@ Because inbound raw SSH is unreliable on this cloud, operator access is exposed 
 Server-side:
 
 - `docker-compose.selfhost.caddy.yml` starts `ghcr.io/erebe/wstunnel:latest`
-- Caddy proxies `https://app.aiathome.ru/multica-ssh...` to the tunnel service
+- Caddy proxies `https://ssh.aiathome.ru` to the tunnel service
 - the tunnel is restricted to `127.0.0.1:22` on the VM
 
 Client-side requirements:
@@ -159,7 +159,7 @@ Host multica-prod
   Port 22
   User ubuntu
   IdentityFile ~/.ssh/multica-prod.pem
-  ProxyCommand wstunnel client --log-lvl=off --http-upgrade-path-prefix multica-ssh -L stdio://%h:%p wss://app.aiathome.ru
+  ProxyCommand wstunnel client --log-lvl=off -L stdio://%h:%p wss://ssh.aiathome.ru
 ```
 
 Then connect with:
@@ -171,7 +171,7 @@ ssh multica-prod
 One-shot command without `~/.ssh/config`:
 
 ```bash
-ssh -o "ProxyCommand=wstunnel client --log-lvl=off --http-upgrade-path-prefix multica-ssh -L stdio://127.0.0.1:22 wss://app.aiathome.ru" -i /path/to/key.pem ubuntu@dummy
+ssh -o "ProxyCommand=wstunnel client --log-lvl=off -L stdio://127.0.0.1:22 wss://ssh.aiathome.ru" -i /path/to/key.pem ubuntu@dummy
 ```
 
 ## Team Workflow

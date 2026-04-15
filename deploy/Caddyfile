@@ -2,17 +2,18 @@
 	email {$LETSENCRYPT_EMAIL}
 }
 
-{$PUBLIC_DOMAIN} {
-	encode zstd gzip
-
-	@wstunnel path /{$SSH_TUNNEL_PATH_PREFIX}*
-	reverse_proxy @wstunnel wstunnel:8081 {
+{$SSH_TUNNEL_DOMAIN} {
+	reverse_proxy wstunnel:8081 {
 		header_up Connection {header.Connection}
 		header_up Upgrade {header.Upgrade}
 		header_up Sec-WebSocket-Key {header.Sec-WebSocket-Key}
 		header_up Sec-WebSocket-Version {header.Sec-WebSocket-Version}
 		header_up Sec-WebSocket-Protocol {header.Sec-WebSocket-Protocol}
 	}
+}
+
+{$PUBLIC_DOMAIN} {
+	encode zstd gzip
 
 	@backend path /api/* /auth/* /health /ws /uploads/*
 	reverse_proxy @backend backend:8080

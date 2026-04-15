@@ -8,7 +8,7 @@ services:
     environment:
       PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?set PUBLIC_DOMAIN}
       LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL:?set LETSENCRYPT_EMAIL}
-      SSH_TUNNEL_PATH_PREFIX: ${SSH_TUNNEL_PATH_PREFIX:-multica-ssh}
+      SSH_TUNNEL_DOMAIN: ${SSH_TUNNEL_DOMAIN:-ssh.aiathome.ru}
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
@@ -23,7 +23,6 @@ services:
       - >
         exec /home/app/wstunnel server
         --restrict-to 127.0.0.1:22
-        --restrict-http-upgrade-path-prefix ${SSH_TUNNEL_PATH_PREFIX:-multica-ssh}
         ws://0.0.0.0:8081
 
 volumes:
