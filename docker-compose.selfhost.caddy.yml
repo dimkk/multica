@@ -18,12 +18,13 @@ services:
     image: ghcr.io/erebe/wstunnel:latest
     restart: unless-stopped
     command:
-      - server
-      - ws://0.0.0.0:8081
-      - --restrict-to
-      - 127.0.0.1:22
-      - --restrict-http-upgrade-path-prefix
-      - ${SSH_TUNNEL_PATH_PREFIX:-multica-ssh}
+      - /bin/sh
+      - -lc
+      - >
+        exec /home/app/wstunnel server
+        --restrict-to 127.0.0.1:22
+        --restrict-http-upgrade-path-prefix ${SSH_TUNNEL_PATH_PREFIX:-multica-ssh}
+        ws://0.0.0.0:8081
 
 volumes:
   caddy-data:
