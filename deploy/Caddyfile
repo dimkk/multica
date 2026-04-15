@@ -2,12 +2,6 @@
 	email {$LETSENCRYPT_EMAIL}
 }
 
-ssh.aiathome.ru {
-	reverse_proxy wstunnel:8081 {
-		header_up Sec-WebSocket-Protocol {>Sec-WebSocket-Protocol}
-	}
-}
-
 {$PUBLIC_DOMAIN} {
 	encode zstd gzip
 

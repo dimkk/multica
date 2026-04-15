@@ -39,12 +39,13 @@ It is not the active production path because inbound SSH on this cloud is unreli
 
 ## HTTPS Edge
 
-The recommended edge is `Caddy + Let's Encrypt + wstunnel`, not a static certificate and not the earlier Traefik label-based overlay.
+The recommended edge is `Caddy + HAProxy + wstunnel`, not a static certificate and not the earlier Traefik label-based overlay.
 
 Files:
 
 - `docker-compose.selfhost.caddy.yml`
 - `deploy/Caddyfile`
+- `deploy/haproxy.cfg`
 - `deploy/selfhost.caddy.env.example`
 
 One-time server setup:
@@ -76,7 +77,7 @@ NEXT_PUBLIC_WS_URL=
 Notes:
 
 - Caddy terminates TLS for `app.aiathome.ru` and routes `/api`, `/auth`, `/health`, `/ws`, and `/uploads` to the backend
-- Caddy also terminates TLS for `ssh.aiathome.ru` and proxies websocket upgrades to `wstunnel`
+- HAProxy owns public `:443` and forwards `ssh.aiathome.ru` to `wstunnel` using SNI
 - `ssh.aiathome.ru` is reserved for the operator SSH-over-TLS tunnel when `wstunnel` is enabled
 - everything else goes to the frontend
 - leave `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_WS_URL` empty so the browser stays same-origin under the current host
@@ -144,7 +145,7 @@ Server-side:
 
 - `Dockerfile.admin-ssh` builds a dedicated operator SSH container
 - `docker-compose.selfhost.caddy.yml` starts `ghcr.io/erebe/wstunnel:latest`
-- Caddy routes `ssh.aiathome.ru` to `wstunnel`
+- HAProxy routes `ssh.aiathome.ru` to `wstunnel` by SNI
 - `wstunnel` is restricted to `admin-ssh:2222`
 - the SSH shell lands in the `admin-ssh` container with `/workspace` mounted from `/opt/multica`
 - Docker socket is mounted, so `docker`, `docker compose`, and repo operations are available from that shell

@@ -4,7 +4,6 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
-      - "443:443"
     environment:
       PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?set PUBLIC_DOMAIN}
       LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL:?set LETSENCRYPT_EMAIL}
@@ -12,6 +11,18 @@ services:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
+
+  haproxy:
+    image: haproxy:3.2-alpine
+    restart: unless-stopped
+    depends_on:
+      - caddy
+      - admin-ssh
+      - wstunnel
+    ports:
+      - "443:443"
+    volumes:
+      - ./deploy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
 
   admin-ssh:
     build:
@@ -33,7 +44,7 @@ services:
       - >
         exec /home/app/wstunnel server
         --restrict-to admin-ssh:2222
-        ws://0.0.0.0:8081
+        wss://0.0.0.0:8443
 
 volumes:
   caddy-data:
