@@ -1,0 +1,51 @@
+services:
+  traefik:
+    image: traefik:v3.3
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.le.acme.email=${LETSENCRYPT_EMAIL:?set LETSENCRYPT_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.le.acme.httpchallenge=true
+      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
+      - --api.dashboard=false
+      - --log.level=INFO
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-acme:/letsencrypt
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.http-catchall.rule=HostRegexp(`{host:.+}`)
+      - traefik.http.routers.http-catchall.entrypoints=web
+      - traefik.http.routers.http-catchall.middlewares=redirect-to-https
+      - traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https
+      - traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true
+
+  backend:
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.multica-backend.rule=Host(`${PUBLIC_DOMAIN:?set PUBLIC_DOMAIN}`) && (PathPrefix(`/api`) || PathPrefix(`/auth`) || Path(`/ws`) || Path(`/health`) || PathPrefix(`/uploads`))
+      - traefik.http.routers.multica-backend.entrypoints=websecure
+      - traefik.http.routers.multica-backend.priority=100
+      - traefik.http.routers.multica-backend.tls=true
+      - traefik.http.routers.multica-backend.tls.certresolver=le
+      - traefik.http.services.multica-backend.loadbalancer.server.port=8080
+
+  frontend:
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.multica-frontend.rule=Host(`${PUBLIC_DOMAIN:?set PUBLIC_DOMAIN}`)
+      - traefik.http.routers.multica-frontend.entrypoints=websecure
+      - traefik.http.routers.multica-frontend.priority=1
+      - traefik.http.routers.multica-frontend.tls=true
+      - traefik.http.routers.multica-frontend.tls.certresolver=le
+      - traefik.http.services.multica-frontend.loadbalancer.server.port=3000
+
+volumes:
+  traefik-acme:

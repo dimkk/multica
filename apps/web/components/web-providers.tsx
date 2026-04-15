@@ -24,10 +24,17 @@ function hasLegacyToken(): boolean {
 
 export function WebProviders({ children }: { children: React.ReactNode }) {
   const cookieAuth = !hasLegacyToken();
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
+  const wsUrl = process.env.NEXT_PUBLIC_WS_URL ?? (
+    typeof window !== "undefined"
+      ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws`
+      : "ws://localhost:8080/ws"
+  );
+
   return (
     <CoreProvider
-      apiBaseUrl={process.env.NEXT_PUBLIC_API_URL}
-      wsUrl={process.env.NEXT_PUBLIC_WS_URL}
+      apiBaseUrl={apiBaseUrl}
+      wsUrl={wsUrl}
       cookieAuth={cookieAuth}
       onLogin={setLoggedInCookie}
       onLogout={clearLoggedInCookie}
