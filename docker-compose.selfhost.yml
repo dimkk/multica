@@ -1,8 +1,8 @@
-# Self-hosting Docker Compose — starts PostgreSQL, backend, and frontend.
+# Self-hosting Docker Compose вЂ” starts PostgreSQL, backend, and frontend.
 #
 # Usage:
 #   cp .env.example .env
-#   # Edit .env — change JWT_SECRET at minimum
+#   # Edit .env вЂ” change JWT_SECRET at minimum
 #   docker compose -f docker-compose.selfhost.yml up -d
 #
 # Frontend: http://localhost:3000
@@ -40,6 +40,7 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-multica}:${POSTGRES_PASSWORD:-multica}@postgres:5432/${POSTGRES_DB:-multica}?sslmode=disable
       PORT: "8080"
       APP_ENV: ${APP_ENV:-}
+      MASTER_LOGIN_CODE: ${MASTER_LOGIN_CODE:-}
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
