@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 env:
-  DEPLOY_HOST: 195.209.212.86
+  DEPLOY_HOST: 195.209.219.118
   DEPLOY_USER: ubuntu
   DEPLOY_PORT: "22"
   DEPLOY_PATH: /opt/multica

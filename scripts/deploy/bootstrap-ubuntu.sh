@@ -3,7 +3,7 @@ set -euo pipefail
 
 DEPLOY_PATH="${DEPLOY_PATH:-/opt/multica}"
 REPO_URL="${REPO_URL:-https://github.com/dimkk/multica.git}"
-SERVER_IP="${SERVER_IP:-195.209.212.86}"
+SERVER_IP="${SERVER_IP:-195.209.219.118}"
 
 if [[ "${EUID}" -eq 0 ]]; then
   echo "Run this script as a regular sudo-capable user, not root." >&2
@@ -40,8 +40,8 @@ cd "$DEPLOY_PATH"
 if [[ ! -f .env ]]; then
   cp deploy/selfhost.server.env.example .env
   sed -i "s/replace-with-openssl-rand-hex-32/$(openssl rand -hex 32)/" .env
-  sed -i "s|http://195.209.212.86|http://${SERVER_IP}|g" .env
-  sed -i "s|ws://195.209.212.86|ws://${SERVER_IP}|g" .env
+  sed -i "s|http://195.209.219.118|http://${SERVER_IP}|g" .env
+  sed -i "s|ws://195.209.219.118|ws://${SERVER_IP}|g" .env
   echo "Created $DEPLOY_PATH/.env from deploy/selfhost.server.env.example"
   echo "Update POSTGRES_PASSWORD and any auth provider settings before exposing the server publicly."
 fi

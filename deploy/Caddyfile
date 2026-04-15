@@ -1,0 +1,12 @@
+{
+	email {$LETSENCRYPT_EMAIL}
+}
+
+{$PUBLIC_DOMAIN} {
+	encode zstd gzip
+
+	@backend path /api/* /auth/* /health /ws /uploads/*
+	reverse_proxy @backend backend:8080
+
+	reverse_proxy frontend:3000
+}

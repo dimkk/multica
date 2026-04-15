@@ -1,182 +1,154 @@
 # Self-Hosted Production Notes
 
-Current production instance:
+Current production target:
 
-- app URL: `http://195.209.212.86:3000`
-- API URL: `http://195.209.212.86:8080`
-- server name: `multica-main-02`
+- public URL: `https://app.aiathome.ru`
+- current VM: `multica-main-03`
+- current VM IP: `195.209.219.118`
 - owner: `d-volkovsky@yandex.ru`
 
-## Current deployment model
+## Deployment Model
 
-Production updates from `main` are currently **pull-based on the server**, not SSH-pushed from GitHub Actions.
+Production is updated from `main` by a pull-based sync on the VM.
 
-The server was bootstrapped with:
+Server-side components:
 
-- repo checkout in `/opt/multica`
+- repo checkout: `/opt/multica`
 - sync script: `/usr/local/bin/multica-sync.sh`
-- timer: `multica-sync.timer`
+- systemd timer: `multica-sync.timer`
 
 Behavior:
 
 1. changes land in `main`
-2. the server polls `origin/main` every 2 minutes
+2. the VM polls `origin/main` every 2 minutes
 3. if `HEAD` changed, it runs:
 
 ```bash
+git fetch origin main
 git reset --hard origin/main
-docker compose -f docker-compose.selfhost.yml up -d --build --remove-orphans
+docker compose -f docker-compose.selfhost.yml -f docker-compose.selfhost.caddy.yml --env-file .env --env-file .env.caddy up -d --build --remove-orphans
 ```
 
-This is the production update path in use today.
+This is the active production rollout path.
 
-## GitHub workflow status
+## GitHub Workflow
 
-`.github/workflows/deploy-selfhost.yml` is kept as an **SSH fallback/manual workflow** for later use.
+`.github/workflows/deploy-selfhost.yml` is kept as a manual SSH fallback.
 
-It is **not** the active production path right now, because inbound SSH to the running VM is not reliable enough for unattended GitHub Actions deploys.
+It is not the active production path because inbound SSH on this cloud is unreliable. Use it only after SSH access to the VM is confirmed stable.
 
-## Production mode
+## HTTPS Edge
 
-`APP_ENV=production` is **not enabled yet on the live server**.
+The recommended edge is `Caddy + Let's Encrypt`, not a static certificate and not the earlier Traefik label-based overlay.
 
-Reason:
+Files:
 
-- current access is plain HTTP by IP
-- in production mode Multica sets `Secure` auth cookies
-- with plain HTTP, browser login would stop working
+- `docker-compose.selfhost.caddy.yml`
+- `deploy/Caddyfile`
+- `deploy/selfhost.caddy.env.example`
 
-Enable production mode only after the Yandex gateway / reverse proxy is in place and HTTPS is working.
-
-Cutover checklist for later:
-
-1. publish the app behind HTTPS
-2. set `FRONTEND_ORIGIN`, `MULTICA_APP_URL`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_WS_URL` to the final public URLs
-3. configure `RESEND_*` for email auth
-4. set `APP_ENV=production`
-5. rebuild the stack
-
-## Traefik + Let's Encrypt
-
-For a real HTTPS edge, use the Traefik overlay instead of copying a manual certificate onto the VM.
-
-Requirements:
-
-- the public hostname must resolve to the VM IP
-- ports `80` and `443` must be open
-- use a hostname that actually points to the current prod VM
-
-Today that means:
-
-- `app.aiathome.ru` -> `195.209.212.86` is usable
-- `aiathome.ru` is **not** usable yet because DNS still resolves to `195.209.214.122`
-
-One-time setup on the server:
+One-time server setup:
 
 ```bash
 cd /opt/multica
-cp deploy/selfhost.traefik.env.example .env.traefik
-# edit PUBLIC_DOMAIN and LETSENCRYPT_EMAIL
-docker compose -f docker-compose.selfhost.yml -f docker-compose.selfhost.traefik.yml --env-file .env --env-file .env.traefik up -d --build --remove-orphans
+cp deploy/selfhost.caddy.env.example .env.caddy
+# edit PUBLIC_DOMAIN, LETSENCRYPT_EMAIL, and MASTER_LOGIN_CODE if desired
+docker compose -f docker-compose.selfhost.yml -f docker-compose.selfhost.caddy.yml --env-file .env --env-file .env.caddy up -d --build --remove-orphans
 ```
 
-Recommended values for the current server:
+Recommended `.env.caddy` values for the live host:
 
 ```bash
 PUBLIC_DOMAIN=app.aiathome.ru
 LETSENCRYPT_EMAIL=d-volkovsky@yandex.ru
 APP_ENV=production
+MASTER_LOGIN_CODE=
 FRONTEND_ORIGIN=https://app.aiathome.ru
 MULTICA_APP_URL=https://app.aiathome.ru
 MULTICA_SERVER_URL=wss://app.aiathome.ru/ws
 LOCAL_UPLOAD_BASE_URL=https://app.aiathome.ru
 ALLOWED_ORIGINS=https://app.aiathome.ru
 CORS_ALLOWED_ORIGINS=https://app.aiathome.ru
+NEXT_PUBLIC_API_URL=
+NEXT_PUBLIC_WS_URL=
 ```
 
 Notes:
 
-- the frontend can run behind the same host as the API; Traefik sends `/api`, `/auth`, `/ws`, `/health`, and `/uploads` to the backend and everything else to the frontend
-- Let's Encrypt uses the HTTP challenge, so port `80` must stay reachable from the public internet
-- after the HTTPS edge is live, point additional runtimes at `https://app.aiathome.ru` and `wss://app.aiathome.ru/ws`
+- Caddy terminates TLS and routes `/api`, `/auth`, `/health`, `/ws`, and `/uploads` to the backend
+- everything else goes to the frontend
+- leave `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_WS_URL` empty so the browser stays same-origin under the current host
+- Let's Encrypt uses the HTTP challenge, so port `80` must remain publicly reachable
+
+## Production Login
+
+With `APP_ENV=production`, the built-in `888888` dev code is disabled.
+
+For self-hosted recovery, the backend now supports an optional `MASTER_LOGIN_CODE` env var:
+
+- set `MASTER_LOGIN_CODE` in `.env.caddy` if you need operator login without external email delivery
+- the user must still request `/auth/send-code` first for the same email
+- then the configured master code can be entered in the UI
+
+If you configure `RESEND_API_KEY`, normal email delivery works and `MASTER_LOGIN_CODE` can be left empty.
 
 ## Add Another Runtime
 
-Each additional runtime is installed on a separate machine and connects back to this server.
+Each additional runtime is installed on a separate machine and connects back to `https://app.aiathome.ru`.
 
 ### macOS / Linux
 
-Install prerequisites:
+Prerequisites:
 
 - `codex` on `PATH`
 - `multica` CLI
 
-CLI install:
+Install the CLI:
 
 ```bash
 brew tap multica-ai/tap
 brew install multica
 ```
 
-Point the CLI to this server:
-
-```bash
-multica config set app_url http://195.209.212.86:3000
-multica config set server_url http://195.209.212.86:8080
-```
-
-Authenticate and register the runtime:
-
-```bash
-multica login
-multica daemon start
-```
-
-Login details for the current non-production deployment:
-
-- email: the operator's email
-- verification code: `888888`
-
-Verify:
-
-```bash
-multica daemon status
-```
-
-The runtime should appear in:
-
-- `Settings -> Runtimes`
-
-### Windows
-
-There is no official Windows release artifact in this repo today.
-
-Use one of these options:
-
-1. run the runtime from WSL2 and follow the Linux steps
-2. build `multica.exe` locally from source and then run the same `config set`, `login`, and `daemon start` commands
-
-After the HTTPS cutover, use:
+Point the CLI at production:
 
 ```bash
 multica config set app_url https://app.aiathome.ru
 multica config set server_url wss://app.aiathome.ru/ws
 ```
 
+Authenticate and register:
+
+```bash
+multica login
+multica daemon start
+multica daemon status
+```
+
+The runtime should appear in `Settings -> Runtimes`.
+
+### Windows
+
+Use one of these options:
+
+1. run the runtime from WSL2 and follow the Linux steps
+2. build `multica.exe` locally from source, then run the same `config set`, `login`, and `daemon start` commands
+
 ## Team Workflow
 
-Current operating model:
+Operating model:
 
-1. developers open `http://195.209.212.86:3000`
-2. create or join the workspace owned by `d-volkovsky@yandex.ru`
-3. each machine that should execute agent work installs `codex` + `multica`
-4. that machine runs `multica daemon start` and becomes a runtime
-5. in the UI, create an agent and bind it to the runtime
-6. create issues and assign them to the agent
-7. the runtime daemon picks tasks up automatically
-8. when code is merged to `main`, production updates automatically within about 2 minutes
+1. open `https://app.aiathome.ru`
+2. log in as a workspace member of `d-volkovsky@yandex.ru`
+3. each execution machine installs `codex` and `multica`
+4. each execution machine runs `multica daemon start`
+5. create agents in the UI and bind them to the available runtimes
+6. create issues and assign them to the agents
+7. runtime daemons execute the tasks automatically
+8. updates merged to `main` reach production through the VM sync timer
 
 ## Notes
 
-- current runtime owner was verified through the API: `d-volkovsky@yandex.ru` is already the workspace `owner`
-- current production health check: `http://195.209.212.86:8080/health`
+- `d-volkovsky@yandex.ru` is the verified workspace owner on the current production instance
+- direct health check on the active VM remains `http://195.209.219.118:8080/health`
+- `docker-compose.selfhost.traefik.yml` is left in the repo only as an experimental fallback overlay
