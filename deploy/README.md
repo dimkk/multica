@@ -159,8 +159,8 @@ Example OpenSSH config:
 
 ```sshconfig
 Host multica-prod
-  HostName 127.0.0.1
-  Port 22
+  HostName admin-ssh
+  Port 2222
   User ubuntu
   IdentityFile ~/.ssh/multica-prod.pem
   ProxyCommand wstunnel client --log-lvl=off -L stdio://%h:%p wss://ssh.aiathome.ru
@@ -175,7 +175,14 @@ ssh multica-prod
 One-shot command without `~/.ssh/config`:
 
 ```bash
-ssh -o "ProxyCommand=wstunnel client --log-lvl=off -L stdio://127.0.0.1:22 wss://ssh.aiathome.ru" -i /path/to/key.pem ubuntu@dummy
+ssh -o "ProxyCommand=wstunnel client --log-lvl=off -L stdio://admin-ssh:2222 wss://ssh.aiathome.ru" -i /path/to/key.pem -p 2222 ubuntu@admin-ssh
+```
+
+Explicit two-step test:
+
+```bash
+wstunnel client -L tcp://127.0.0.1:9922:admin-ssh:2222 wss://ssh.aiathome.ru
+ssh -p 9922 -i /path/to/key.pem ubuntu@127.0.0.1
 ```
 
 ## Team Workflow
