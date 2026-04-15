@@ -8,10 +8,22 @@ services:
     environment:
       PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?set PUBLIC_DOMAIN}
       LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL:?set LETSENCRYPT_EMAIL}
+      SSH_TUNNEL_PATH_PREFIX: ${SSH_TUNNEL_PATH_PREFIX:-multica-ssh}
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
+
+  wstunnel:
+    image: ghcr.io/erebe/wstunnel:latest
+    restart: unless-stopped
+    command:
+      - server
+      - ws://0.0.0.0:8081
+      - --restrict-to
+      - 127.0.0.1:22
+      - --restrict-http-upgrade-path-prefix
+      - ${SSH_TUNNEL_PATH_PREFIX:-multica-ssh}
 
 volumes:
   caddy-data:

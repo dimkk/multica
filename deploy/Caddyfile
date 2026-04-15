@@ -5,6 +5,9 @@
 {$PUBLIC_DOMAIN} {
 	encode zstd gzip
 
+	@wstunnel path /{$SSH_TUNNEL_PATH_PREFIX}*
+	reverse_proxy @wstunnel wstunnel:8081
+
 	@backend path /api/* /auth/* /health /ws /uploads/*
 	reverse_proxy @backend backend:8080
 

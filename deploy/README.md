@@ -61,6 +61,7 @@ Recommended `.env.caddy` values for the live host:
 ```bash
 PUBLIC_DOMAIN=app.aiathome.ru
 LETSENCRYPT_EMAIL=d-volkovsky@yandex.ru
+SSH_TUNNEL_PATH_PREFIX=multica-ssh
 APP_ENV=production
 MASTER_LOGIN_CODE=
 FRONTEND_ORIGIN=https://app.aiathome.ru
@@ -76,8 +77,9 @@ NEXT_PUBLIC_WS_URL=
 Notes:
 
 - Caddy terminates TLS and routes `/api`, `/auth`, `/health`, `/ws`, and `/uploads` to the backend
+- `/multica-ssh` is reserved for the SSH-over-TLS tunnel when `wstunnel` is enabled
 - everything else goes to the frontend
-- leave `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_WS_URL` empty so the browser stays same-origin under the current host
+- leave `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_WS_URL` empty so the frontend stays same-origin under the current host
 - Let's Encrypt uses the HTTP challenge, so port `80` must remain publicly reachable
 
 ## Production Login
@@ -133,6 +135,44 @@ Use one of these options:
 
 1. run the runtime from WSL2 and follow the Linux steps
 2. build `multica.exe` locally from source, then run the same `config set`, `login`, and `daemon start` commands
+
+## Operator SSH Access
+
+Because inbound raw SSH is unreliable on this cloud, operator access is exposed through `wstunnel` over the existing HTTPS endpoint.
+
+Server-side:
+
+- `docker-compose.selfhost.caddy.yml` starts `ghcr.io/erebe/wstunnel:latest`
+- Caddy proxies `https://app.aiathome.ru/multica-ssh...` to the tunnel service
+- the tunnel is restricted to `127.0.0.1:22` on the VM
+
+Client-side requirements:
+
+- `wstunnel` installed locally
+- the same SSH private key you would normally use for `ubuntu@...`
+
+Example OpenSSH config:
+
+```sshconfig
+Host multica-prod
+  HostName 127.0.0.1
+  Port 22
+  User ubuntu
+  IdentityFile ~/.ssh/multica-prod.pem
+  ProxyCommand wstunnel client --log-lvl=off --http-upgrade-path-prefix multica-ssh -L stdio://%h:%p wss://app.aiathome.ru
+```
+
+Then connect with:
+
+```bash
+ssh multica-prod
+```
+
+One-shot command without `~/.ssh/config`:
+
+```bash
+ssh -o "ProxyCommand=wstunnel client --log-lvl=off --http-upgrade-path-prefix multica-ssh -L stdio://127.0.0.1:22 wss://app.aiathome.ru" -i /path/to/key.pem ubuntu@dummy
+```
 
 ## Team Workflow
 
