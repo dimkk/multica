@@ -49,6 +49,7 @@ vi.mock("@multica/core/issues/stores/draft-store", () => ({
 
 vi.mock("@multica/core/issues/mutations", () => ({
   useCreateIssue: () => ({ mutateAsync: mockCreateIssue }),
+  useUpdateIssue: () => ({ mutate: vi.fn() }),
 }));
 
 vi.mock("@multica/core/hooks/use-file-upload", () => ({
@@ -59,10 +60,8 @@ vi.mock("@multica/core/api", () => ({
   api: {},
 }));
 
-vi.mock("../editor", () => ({
-  useFileDropZone: () => ({ isDragOver: false, dropZoneProps: {} }),
-  FileDropOverlay: () => null,
-  ContentEditor: forwardRef(({ defaultValue, onUpdate, placeholder }: any, ref: any) => {
+vi.mock("../editor", () => {
+  const ContentEditor = forwardRef(({ defaultValue, onUpdate, placeholder }: any, ref: any) => {
     const valueRef = useRef(defaultValue || "");
     const [value, setValue] = useState(defaultValue || "");
     useImperativeHandle(ref, () => ({
@@ -80,24 +79,31 @@ vi.mock("../editor", () => ({
         }}
       />
     );
-  }),
-  TitleEditor: ({ defaultValue, placeholder, onChange, onSubmit }: any) => {
-    const [value, setValue] = useState(defaultValue || "");
-    return (
-      <input
-        value={value}
-        placeholder={placeholder}
-        onChange={(e) => {
-          setValue(e.target.value);
-          onChange?.(e.target.value);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") onSubmit?.();
-        }}
-      />
-    );
-  },
-}));
+  });
+  ContentEditor.displayName = "ContentEditor";
+
+  return {
+    useFileDropZone: () => ({ isDragOver: false, dropZoneProps: {} }),
+    FileDropOverlay: () => null,
+    ContentEditor,
+    TitleEditor: ({ defaultValue, placeholder, onChange, onSubmit }: any) => {
+      const [value, setValue] = useState(defaultValue || "");
+      return (
+        <input
+          value={value}
+          placeholder={placeholder}
+          onChange={(e) => {
+            setValue(e.target.value);
+            onChange?.(e.target.value);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") onSubmit?.();
+          }}
+        />
+      );
+    },
+  };
+});
 
 vi.mock("../issues/components", () => ({
   StatusIcon: ({ status }: { status: string }) => <span data-testid="status-icon">{status}</span>,

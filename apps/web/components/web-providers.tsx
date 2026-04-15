@@ -22,14 +22,20 @@ function hasLegacyToken(): boolean {
   }
 }
 
+// Derive WebSocket URL from the page origin so self-hosted / LAN deployments
+// work without explicit NEXT_PUBLIC_WS_URL.  The Next.js rewrite rule
+// (/ws → backend) handles proxying.
+function deriveWsUrl(): string | undefined {
+  if (process.env.NEXT_PUBLIC_WS_URL) return process.env.NEXT_PUBLIC_WS_URL;
+  if (typeof window === "undefined") return undefined;
+  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${proto}//${window.location.host}/ws`;
+}
+
 export function WebProviders({ children }: { children: React.ReactNode }) {
   const cookieAuth = !hasLegacyToken();
-  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
-  const wsUrl = process.env.NEXT_PUBLIC_WS_URL ?? (
-    typeof window !== "undefined"
-      ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws`
-      : "ws://localhost:8080/ws"
-  );
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL;
+  const wsUrl = deriveWsUrl();
 
   return (
     <CoreProvider

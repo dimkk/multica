@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -42,18 +43,25 @@ func NewLocalStorageFromEnv() *LocalStorage {
 	}
 }
 
+func (s *LocalStorage) CdnDomain() string {
+	if s.baseURL == "" {
+		return ""
+	}
+	u, err := url.Parse(s.baseURL)
+	if err != nil {
+		return ""
+	}
+	return u.Hostname()
+}
+
 func (s *LocalStorage) KeyFromURL(rawURL string) string {
 	if s.baseURL != "" && strings.HasPrefix(rawURL, s.baseURL) {
 		rawURL = strings.TrimPrefix(rawURL, s.baseURL)
 	}
 
 	prefix := "/uploads/"
-	if strings.HasPrefix(rawURL, prefix) {
-		filename := strings.TrimPrefix(rawURL, prefix)
-		if i := strings.LastIndex(filename, "/"); i >= 0 {
-			return filename[i+1:]
-		}
-		return filename
+	if idx := strings.Index(rawURL, prefix); idx >= 0 {
+		return rawURL[idx+len(prefix):]
 	}
 	if i := strings.LastIndex(rawURL, "/"); i >= 0 {
 		return rawURL[i+1:]
@@ -81,6 +89,9 @@ func (s *LocalStorage) DeleteKeys(ctx context.Context, keys []string) {
 
 func (s *LocalStorage) Upload(ctx context.Context, key string, data []byte, contentType string, filename string) (string, error) {
 	dest := filepath.Join(s.uploadDir, key)
+	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+		return "", fmt.Errorf("local storage MkdirAll: %w", err)
+	}
 	if err := os.WriteFile(dest, data, 0644); err != nil {
 		return "", fmt.Errorf("local storage WriteFile: %w", err)
 	}

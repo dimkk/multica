@@ -14,9 +14,10 @@ import { BOARD_STATUSES } from "@multica/core/issues/config";
 import { useWorkspaceStore } from "@multica/core/workspace";
 import { WorkspaceAvatar } from "../../workspace/workspace-avatar";
 import { useWorkspaceId } from "@multica/core/hooks";
-import { issueListOptions } from "@multica/core/issues/queries";
+import { issueListOptions, childIssueProgressOptions } from "@multica/core/issues/queries";
 import { useUpdateIssue } from "@multica/core/issues/mutations";
 import { useIssueSelectionStore } from "@multica/core/issues/stores/selection-store";
+import { PageHeader } from "../../layout/page-header";
 import { IssuesHeader } from "./issues-header";
 import { BoardView } from "./board-view";
 import { ListView } from "./list-view";
@@ -59,22 +60,9 @@ export function IssuesPage() {
     [scopedIssues, statusFilters, priorityFilters, assigneeFilters, includeNoAssignee, creatorFilters, projectFilters, includeNoProject],
   );
 
-  // Compute sub-issue progress for each parent from the full (unfiltered) issue list
-  const childProgressMap = useMemo(() => {
-    const map = new Map<string, { done: number; total: number }>();
-    for (const issue of allIssues) {
-      if (!issue.parent_issue_id) continue;
-      const entry = map.get(issue.parent_issue_id);
-      const isDone = issue.status === "done" || issue.status === "cancelled";
-      if (entry) {
-        entry.total++;
-        if (isDone) entry.done++;
-      } else {
-        map.set(issue.parent_issue_id, { done: isDone ? 1 : 0, total: 1 });
-      }
-    }
-    return map;
-  }, [allIssues]);
+  // Fetch sub-issue progress from the backend so counts are accurate
+  // regardless of client-side pagination or filtering of done issues.
+  const { data: childProgressMap = new Map() } = useQuery(childIssueProgressOptions(wsId));
 
   const visibleStatuses = useMemo(() => {
     if (statusFilters.length > 0)
@@ -136,14 +124,14 @@ export function IssuesPage() {
   return (
     <div className="flex flex-1 min-h-0 flex-col">
       {/* Header 1: Workspace breadcrumb */}
-      <div className="flex h-12 shrink-0 items-center gap-1.5 border-b px-4">
+      <PageHeader className="gap-1.5">
         <WorkspaceAvatar name={workspace?.name ?? "W"} size="sm" />
         <span className="text-sm text-muted-foreground">
           {workspace?.name ?? "Workspace"}
         </span>
         <ChevronRight className="h-3 w-3 text-muted-foreground" />
         <span className="text-sm font-medium">Issues</span>
-      </div>
+      </PageHeader>
 
       <ViewStoreProvider store={useIssueViewStore}>
         {/* Header 2: Scope tabs + filters */}

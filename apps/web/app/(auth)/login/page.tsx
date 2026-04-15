@@ -3,6 +3,7 @@
 import { Suspense, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useAuthStore } from "@multica/core/auth";
+import { useWorkspaceStore } from "@multica/core/workspace";
 import { setLoggedInCookie } from "@/features/auth/auth-cookie";
 import { LoginPage, validateCliCallback } from "@multica/views/auth";
 
@@ -31,15 +32,29 @@ function LoginPageContent() {
       ? localStorage.getItem("multica_workspace_id")
       : null;
 
+  const handleSuccess = () => {
+    const ws = useWorkspaceStore.getState().workspace;
+    router.push(ws ? nextUrl : "/onboarding");
+  };
+
+  // Build Google OAuth state: encode platform + next URL so the callback
+  // can redirect to the right place after login.
+  const googleState = [
+    platform === "desktop" ? "platform:desktop" : "",
+    nextUrl !== "/issues" ? `next:${nextUrl}` : "",
+  ]
+    .filter(Boolean)
+    .join(",") || undefined;
+
   return (
     <LoginPage
-      onSuccess={() => router.push(nextUrl)}
+      onSuccess={handleSuccess}
       google={
         googleClientId
           ? {
               clientId: googleClientId,
               redirectUri: `${window.location.origin}/auth/callback`,
-              state: platform === "desktop" ? "platform:desktop" : undefined,
+              state: googleState,
             }
           : undefined
       }

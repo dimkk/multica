@@ -50,24 +50,39 @@ Multica manages the full agent lifecycle: from task assignment to execution moni
 
 ## Quick Install
 
+### macOS / Linux (Homebrew - recommended)
+
+```bash
+brew install multica-ai/tap/multica
+```
+
+Use `brew upgrade multica-ai/tap/multica` to keep the CLI current.
+
+### macOS / Linux (install script)
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/multica-ai/multica/main/scripts/install.sh | bash
 ```
 
-Installs the Multica CLI on macOS and Linux. Works with Homebrew or downloads the binary directly.
+Use this if Homebrew is not available. The script installs the Multica CLI on macOS and Linux by using Homebrew when it is on `PATH`, otherwise it downloads the binary directly.
 
-After installation:
+### Windows (PowerShell)
 
-```bash
-multica login          # Authenticate (opens browser)
-multica daemon start   # Start the local agent runtime
-multica daemon stop    # Stop the daemon when done
+```powershell
+irm https://raw.githubusercontent.com/multica-ai/multica/main/scripts/install.ps1 | iex
 ```
 
-> **Self-hosting?** Add `--local` to deploy a full Multica server on your machine:
+Then configure, authenticate, and start the daemon in one command:
+
+```bash
+multica setup          # Connect to Multica Cloud, log in, start daemon
+```
+
+> **Self-hosting?** Add `--with-server` to deploy a full Multica server on your machine:
 >
 > ```bash
-> curl -fsSL https://raw.githubusercontent.com/multica-ai/multica/main/scripts/install.sh | bash -s -- --local
+> curl -fsSL https://raw.githubusercontent.com/multica-ai/multica/main/scripts/install.sh | bash -s -- --with-server
+> multica setup self-host
 > ```
 >
 > Requires Docker. See the [Self-Hosting Guide](SELF_HOSTING.md) for details.
@@ -76,11 +91,10 @@ multica daemon stop    # Stop the daemon when done
 
 ## Getting Started
 
-### 1. Log in and start the daemon
+### 1. Set up and start the daemon
 
 ```bash
-multica login           # Authenticate with your Multica account
-multica daemon start    # Start the local agent runtime
+multica setup           # Configure, authenticate, and start the daemon
 ```
 
 The daemon runs in the background and auto-detects agent CLIs (`claude`, `codex`, `openclaw`, `opencode`) on your PATH.
@@ -101,6 +115,21 @@ Create an issue from the board (or via `multica issue create`), then assign it t
 
 ---
 
+## Multica vs Paperclip
+
+| | Multica | Paperclip |
+|---|---------|-----------|
+| **Focus** | Team AI agent collaboration platform | Solo AI agent company simulator |
+| **User model** | Multi-user teams with roles & permissions | Single board operator |
+| **Agent interaction** | Issues + Chat conversations | Issues + Heartbeat |
+| **Deployment** | Cloud-first | Local-first |
+| **Management depth** | Lightweight (Issues / Projects / Labels) | Heavy governance (Org chart / Approvals / Budgets) |
+| **Extensibility** | Skills system | Skills + Plugin system |
+
+**TL;DR — Multica is built for teams that want to collaborate with AI agents on real projects together.**
+
+---
+
 ## CLI
 
 The `multica` CLI connects your local machine to Multica — authenticate, manage workspaces, and run the agent daemon.
@@ -110,9 +139,8 @@ The `multica` CLI connects your local machine to Multica — authenticate, manag
 | `multica login` | Authenticate (opens browser) |
 | `multica daemon start` | Start the local agent runtime |
 | `multica daemon status` | Check daemon status |
-| `multica setup` | One-command setup (configure + login + start daemon) |
-| `multica setup --local` | Same, but for self-hosted deployments |
-| `multica config local` | Configure CLI for a local self-hosted server |
+| `multica setup` | One-command setup for Multica Cloud (configure + login + start daemon) |
+| `multica setup self-host` | Same, but for self-hosted deployments |
 | `multica issue list` | List issues in your workspace |
 | `multica issue create` | Create a new issue |
 | `multica update` | Update to the latest version |
@@ -156,3 +184,13 @@ make dev
 `make dev` auto-detects your environment (main checkout or worktree), creates the env file, installs dependencies, sets up the database, runs migrations, and starts all services.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development workflow, worktree support, testing, and troubleshooting.
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=multica-ai%2Fmultica&type=date&legend=bottom-right">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=multica-ai/multica&type=date&legend=top-left" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=multica-ai/multica&type=date&legend=top-left" />
+    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=multica-ai/multica&type=date&legend=top-left" />
+  </picture>
+</a>

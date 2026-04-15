@@ -36,6 +36,8 @@ services:
         condition: service_healthy
     ports:
       - "${PORT:-8080}:8080"
+    volumes:
+      - backend_uploads:/app/data/uploads
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-multica}:${POSTGRES_PASSWORD:-multica}@postgres:5432/${POSTGRES_DB:-multica}?sslmode=disable
       PORT: "8080"
@@ -59,8 +61,6 @@ services:
       LOCAL_UPLOAD_DIR: ${LOCAL_UPLOAD_DIR:-./data/uploads}
       LOCAL_UPLOAD_BASE_URL: ${LOCAL_UPLOAD_BASE_URL:-}
       MULTICA_APP_URL: ${MULTICA_APP_URL:-http://localhost:3000}
-    volumes:
-      - uploads:/app/data/uploads
 
   frontend:
     build:
@@ -69,6 +69,7 @@ services:
       args:
         REMOTE_API_URL: ${REMOTE_API_URL:-http://backend:8080}
         NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-}
     depends_on:
       - backend
     ports:
@@ -78,4 +79,4 @@ services:
 
 volumes:
   pgdata:
-  uploads:
+  backend_uploads:

@@ -1,10 +1,13 @@
 package handler
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -117,12 +120,77 @@ type DaemonRegisterRequest struct {
 	DaemonID    string `json:"daemon_id"`
 	DeviceName  string `json:"device_name"`
 	CLIVersion  string `json:"cli_version"` // multica CLI version
+	LaunchedBy  string `json:"launched_by"` // "desktop" when spawned by the Electron app
 	Runtimes    []struct {
 		Name    string `json:"name"`
 		Type    string `json:"type"`
 		Version string `json:"version"` // agent CLI version (claude/codex)
 		Status  string `json:"status"`
 	} `json:"runtimes"`
+}
+
+type daemonWorkspaceReposResponse struct {
+	WorkspaceID  string     `json:"workspace_id"`
+	Repos        []RepoData `json:"repos"`
+	ReposVersion string     `json:"repos_version"`
+}
+
+func normalizeWorkspaceRepos(repos []RepoData) []RepoData {
+	if len(repos) == 0 {
+		return []RepoData{}
+	}
+
+	normalized := make([]RepoData, 0, len(repos))
+	seen := make(map[string]struct{}, len(repos))
+	for _, repo := range repos {
+		url := strings.TrimSpace(repo.URL)
+		if url == "" {
+			continue
+		}
+		if _, exists := seen[url]; exists {
+			continue
+		}
+		seen[url] = struct{}{}
+		normalized = append(normalized, RepoData{
+			URL:         url,
+			Description: strings.TrimSpace(repo.Description),
+		})
+	}
+	return normalized
+}
+
+func workspaceReposVersion(repos []RepoData) string {
+	urls := make([]string, 0, len(repos))
+	for _, repo := range repos {
+		if repo.URL == "" {
+			continue
+		}
+		urls = append(urls, repo.URL)
+	}
+	sort.Strings(urls)
+	sum := sha256.Sum256([]byte(strings.Join(urls, "\n")))
+	return hex.EncodeToString(sum[:])
+}
+
+func parseWorkspaceRepos(raw []byte) []RepoData {
+	if len(raw) == 0 {
+		return []RepoData{}
+	}
+
+	var repos []RepoData
+	if err := json.Unmarshal(raw, &repos); err != nil {
+		return []RepoData{}
+	}
+	return normalizeWorkspaceRepos(repos)
+}
+
+func workspaceReposResponse(workspaceID string, raw []byte) daemonWorkspaceReposResponse {
+	repos := parseWorkspaceRepos(raw)
+	return daemonWorkspaceReposResponse{
+		WorkspaceID:  workspaceID,
+		Repos:        repos,
+		ReposVersion: workspaceReposVersion(repos),
+	}
 }
 
 func (h *Handler) DaemonRegister(w http.ResponseWriter, r *http.Request) {
@@ -200,6 +268,7 @@ func (h *Handler) DaemonRegister(w http.ResponseWriter, r *http.Request) {
 		metadata, _ := json.Marshal(map[string]any{
 			"version":     runtime.Version,
 			"cli_version": req.CLIVersion,
+			"launched_by": req.LaunchedBy,
 		})
 
 		registered, err := h.Queries.UpsertAgentRuntime(r.Context(), db.UpsertAgentRuntimeParams{
@@ -217,6 +286,28 @@ func (h *Handler) DaemonRegister(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "failed to register runtime: "+err.Error())
 			return
 		}
+
+		// Migrate agents from old offline runtimes on the same machine to the
+		// newly registered runtime. Uses the runtime's owner_id (preserved via
+		// COALESCE on upsert) so migration works with both PAT and daemon tokens.
+		// Scoped by daemon_id prefix so that only old profile-suffixed runtimes
+		// (e.g. "hostname-staging") from this machine are affected.
+		effectiveOwnerID := registered.OwnerID
+		if effectiveOwnerID.Valid {
+			migrated, err := h.Queries.MigrateAgentsToRuntime(r.Context(), db.MigrateAgentsToRuntimeParams{
+				NewRuntimeID:   registered.ID,
+				WorkspaceID:    parseUUID(req.WorkspaceID),
+				Provider:       provider,
+				OwnerID:        effectiveOwnerID,
+				DaemonIDPrefix: strToText(req.DaemonID),
+			})
+			if err != nil {
+				slog.Warn("failed to migrate agents to new runtime", "runtime_id", uuidToString(registered.ID), "error", err)
+			} else if migrated > 0 {
+				slog.Info("migrated agents to new runtime", "runtime_id", uuidToString(registered.ID), "provider", provider, "migrated_count", migrated)
+			}
+		}
+
 		resp = append(resp, runtimeToResponse(registered))
 	}
 
@@ -226,16 +317,27 @@ func (h *Handler) DaemonRegister(w http.ResponseWriter, r *http.Request) {
 		"runtimes": resp,
 	})
 
-	// Include workspace repos so the daemon can cache them locally.
-	var repos []RepoData
-	if ws.Repos != nil {
-		json.Unmarshal(ws.Repos, &repos)
-	}
-	if repos == nil {
-		repos = []RepoData{}
+	repoResp := workspaceReposResponse(req.WorkspaceID, ws.Repos)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"runtimes":      resp,
+		"repos":         repoResp.Repos,
+		"repos_version": repoResp.ReposVersion,
+	})
+}
+
+func (h *Handler) GetDaemonWorkspaceRepos(w http.ResponseWriter, r *http.Request) {
+	workspaceID := strings.TrimSpace(chi.URLParam(r, "workspaceId"))
+	if !h.requireDaemonWorkspaceAccess(w, r, workspaceID) {
+		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"runtimes": resp, "repos": repos})
+	ws, err := h.Queries.GetWorkspace(r.Context(), parseUUID(workspaceID))
+	if err != nil {
+		writeError(w, http.StatusNotFound, "workspace not found")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, workspaceReposResponse(workspaceID, ws.Repos))
 }
 
 // DaemonDeregister marks runtimes as offline when the daemon shuts down.
@@ -358,15 +460,29 @@ func (h *Handler) ClaimTaskByRuntime(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build response with fresh agent data (name + skills).
+	// Build response with fresh agent data (name + skills + custom_env + custom_args).
 	resp := taskToResponse(*task)
 	if agent, err := h.Queries.GetAgent(r.Context(), task.AgentID); err == nil {
 		skills := h.TaskService.LoadAgentSkills(r.Context(), task.AgentID)
+		var customEnv map[string]string
+		if agent.CustomEnv != nil {
+			if err := json.Unmarshal(agent.CustomEnv, &customEnv); err != nil {
+				slog.Warn("failed to unmarshal agent custom_env", "agent_id", uuidToString(agent.ID), "error", err)
+			}
+		}
+		var customArgs []string
+		if agent.CustomArgs != nil {
+			if err := json.Unmarshal(agent.CustomArgs, &customArgs); err != nil {
+				slog.Warn("failed to unmarshal agent custom_args", "agent_id", uuidToString(agent.ID), "error", err)
+			}
+		}
 		resp.Agent = &TaskAgentData{
 			ID:           uuidToString(agent.ID),
 			Name:         agent.Name,
 			Instructions: agent.Instructions,
 			Skills:       skills,
+			CustomEnv:    customEnv,
+			CustomArgs:   customArgs,
 		}
 	}
 
@@ -828,6 +944,70 @@ func (h *Handler) ListTasksByIssue(w http.ResponseWriter, r *http.Request) {
 	resp := make([]AgentTaskResponse, len(tasks))
 	for i, t := range tasks {
 		resp[i] = taskToResponse(t)
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// ListTaskMessagesByUser returns task messages for a task.
+// Used by the frontend under regular user auth (not daemon auth).
+// Verifies the task belongs to the caller's workspace.
+func (h *Handler) ListTaskMessagesByUser(w http.ResponseWriter, r *http.Request) {
+	taskID := chi.URLParam(r, "taskId")
+
+	task, err := h.Queries.GetAgentTask(r.Context(), parseUUID(taskID))
+	if err != nil {
+		writeError(w, http.StatusNotFound, "task not found")
+		return
+	}
+
+	// Verify the task belongs to the caller's workspace.
+	wsID := h.resolveTaskWorkspaceID(r, task)
+	if wsID == "" || wsID != middleware.WorkspaceIDFromContext(r.Context()) {
+		writeError(w, http.StatusNotFound, "task not found")
+		return
+	}
+
+	var (
+		messages []db.TaskMessage
+		queryErr error
+	)
+	if sinceStr := r.URL.Query().Get("since"); sinceStr != "" {
+		sinceSeq, parseErr := strconv.Atoi(sinceStr)
+		if parseErr != nil {
+			writeError(w, http.StatusBadRequest, "invalid since parameter")
+			return
+		}
+		messages, queryErr = h.Queries.ListTaskMessagesSince(r.Context(), db.ListTaskMessagesSinceParams{
+			TaskID: parseUUID(taskID),
+			Seq:    int32(sinceSeq),
+		})
+	} else {
+		messages, queryErr = h.Queries.ListTaskMessages(r.Context(), parseUUID(taskID))
+	}
+	if queryErr != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list task messages")
+		return
+	}
+
+	issueID := uuidToString(task.IssueID)
+
+	resp := make([]protocol.TaskMessagePayload, len(messages))
+	for i, m := range messages {
+		var input map[string]any
+		if m.Input != nil {
+			json.Unmarshal(m.Input, &input)
+		}
+		resp[i] = protocol.TaskMessagePayload{
+			TaskID:  taskID,
+			IssueID: issueID,
+			Seq:     int(m.Seq),
+			Type:    m.Type,
+			Tool:    m.Tool.String,
+			Content: m.Content.String,
+			Input:   input,
+			Output:  m.Output.String,
+		}
 	}
 
 	writeJSON(w, http.StatusOK, resp)

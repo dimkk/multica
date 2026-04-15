@@ -20,9 +20,10 @@ import { ListView } from "../../issues/components/list-view";
 import { BatchActionToolbar } from "../../issues/components/batch-action-toolbar";
 import { registerViewStoreForWorkspaceSync } from "@multica/core/issues/stores/view-store";
 import { useWorkspaceId } from "@multica/core/hooks";
-import { myIssueListOptions, type MyIssuesFilter } from "@multica/core/issues/queries";
+import { myIssueListOptions, childIssueProgressOptions, type MyIssuesFilter } from "@multica/core/issues/queries";
 import { useUpdateIssue, useLoadMoreDoneIssues } from "@multica/core/issues/mutations";
 import { myIssuesViewStore } from "@multica/core/issues/stores/my-issues-view-store";
+import { PageHeader } from "../../layout/page-header";
 import { MyIssuesHeader } from "./my-issues-header";
 
 export function MyIssuesPage() {
@@ -88,21 +89,7 @@ export function MyIssuesPage() {
     [myIssues, statusFilters, priorityFilters],
   );
 
-  const childProgressMap = useMemo(() => {
-    const map = new Map<string, { done: number; total: number }>();
-    for (const issue of myIssues) {
-      if (!issue.parent_issue_id) continue;
-      const entry = map.get(issue.parent_issue_id);
-      const isDone = issue.status === "done" || issue.status === "cancelled";
-      if (entry) {
-        entry.total++;
-        if (isDone) entry.done++;
-      } else {
-        map.set(issue.parent_issue_id, { done: isDone ? 1 : 0, total: 1 });
-      }
-    }
-    return map;
-  }, [myIssues]);
+  const { data: childProgressMap = new Map() } = useQuery(childIssueProgressOptions(wsId));
 
   const visibleStatuses = useMemo(() => {
     if (statusFilters.length > 0)
@@ -163,14 +150,14 @@ export function MyIssuesPage() {
   return (
     <div className="flex flex-1 min-h-0 flex-col">
       {/* Header 1: Workspace breadcrumb */}
-      <div className="flex h-12 shrink-0 items-center gap-1.5 border-b px-4">
+      <PageHeader className="gap-1.5">
         <WorkspaceAvatar name={workspace?.name ?? "W"} size="sm" />
         <span className="text-sm text-muted-foreground">
           {workspace?.name ?? "Workspace"}
         </span>
         <ChevronRight className="h-3 w-3 text-muted-foreground" />
         <span className="text-sm font-medium">My Issues</span>
-      </div>
+      </PageHeader>
 
       {/* Header: scope tabs (left) + controls (right) */}
       <MyIssuesHeader allIssues={myIssues} />

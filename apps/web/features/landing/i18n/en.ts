@@ -126,7 +126,7 @@ export const en: LandingDict = {
       {
         title: "Install the CLI & connect your machine",
         description:
-          "Run multica login to authenticate, then multica daemon start. The daemon auto-detects Claude Code, Codex, OpenClaw, and OpenCode on your machine \u2014 plug in and go.",
+          "Run multica setup to configure, authenticate, and start the daemon. It auto-detects Claude Code, Codex, OpenClaw, and OpenCode on your machine \u2014 plug in and go.",
       },
       {
         title: "Create your first agent",
@@ -278,12 +278,81 @@ export const en: LandingDict = {
     },
     entries: [
       {
+        version: "0.2.0",
+        date: "2026-04-15",
+        title: "Desktop App, Autopilot & Invitations",
+        changes: [],
+        features: [
+          "Desktop app for macOS — native Electron app with tab system, built-in daemon management, immersive mode, and auto-update",
+          "Autopilot — scheduled and triggered automations for AI agents",
+          "Workspace invitations with email notifications and dedicated accept page",
+          "Custom CLI arguments per agent for advanced runtime configuration",
+          "Chat redesign with unread tracking and improved session management",
+          "Create Agent dialog shows runtime owner with Mine/All filter",
+        ],
+        improvements: [
+          "Inter font with CJK fallback and automatic CJK+Latin spacing",
+          "Sidebar user menu redesigned as full-row popover",
+          "WebSocket ping/pong heartbeat to detect dead connections",
+          "Members can now create agents and manage their own skills",
+        ],
+        fixes: [
+          "Agent now triggered on reply in threads where it already participated",
+          "Self-hosting: local uploads persist in Docker, WebSocket URL auto-derived for LAN access",
+          "Stale cmd+k recent issues resolved",
+        ],
+      },
+      {
+        version: "0.1.33",
+        date: "2026-04-14",
+        title: "Gemini CLI & Agent Env Vars",
+        changes: [],
+        features: [
+          "Google Gemini CLI as a new agent runtime with live log streaming",
+          "Custom environment variables for agents (router/proxy mode) with dedicated settings tab",
+          "\"Set parent issue\" and \"Add sub-issue\" actions in issue context menu",
+          "CLI `--parent` flag for issue update and `--content-stdin` for piping comment content",
+          "Sub-issues inherit parent project automatically",
+        ],
+        improvements: [
+          "Editor bubble menu and link preview rewritten for reliability",
+          "OpenClaw backend P0+P1 improvements (multi-line JSON, incremental parsing)",
+          "Self-hosted WebSocket URL auto-derived for LAN access",
+        ],
+        fixes: [
+          "S3 upload keys scoped by workspace (security)",
+          "Workspace membership validation for subscriptions and uploads (security)",
+          "Active tasks auto-cancelled when issue status changes to cancelled",
+          "Agent task stall when process hangs on stdout",
+          "Daemon trigger prompt now embeds the actual triggering comment content",
+          "Login and dashboard redirect stability improvements",
+        ],
+      },
+      {
+        version: "0.1.28",
+        date: "2026-04-13",
+        title: "Windows Support, Auth & Onboarding",
+        changes: [],
+        features: [
+          "Windows support — CLI installation, daemon, and release builds",
+          "Auth migrated to HttpOnly Cookie with WebSocket Origin whitelist",
+          "Full-screen onboarding wizard for new workspaces",
+          "Resizable Master Agent chat window with session history improvements",
+          "Token usage log scanning for OpenCode, OpenClaw, and Hermes runtimes",
+        ],
+        fixes: [
+          "WebSocket first-message authentication security fix",
+          "Content-Security-Policy response header",
+          "Sub-issue progress computed from database instead of paginated client cache",
+        ],
+      },
+      {
         version: "0.1.27",
         date: "2026-04-12",
         title: "One-Click Setup, Self-Hosting & Stability",
         changes: [],
         features: [
-          "One-click install & setup — `curl | bash` installs CLI, `--local` bootstraps full self-hosting, `multica setup` auto-detects local server",
+          "One-click install & setup — `curl | bash` installs CLI, `--with-server` bootstraps full self-hosting, `multica setup` configures your environment",
           "Self-hosted storage — local file fallback when S3 is unavailable, plus custom S3 endpoint support (MinIO)",
           "Inline property editing (priority, status, lead) on project list page",
         ],
