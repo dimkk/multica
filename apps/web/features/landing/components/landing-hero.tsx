@@ -11,14 +11,14 @@ import {
   GeminiCliLogo,
   OpenClawLogo,
   OpenCodeLogo,
-  GitHubMark,
-  githubUrl,
+  installScriptUrl,
   heroButtonClassName,
 } from "./shared";
 
 export function LandingHero() {
   const { t } = useLocale();
   const user = useAuthStore((s) => s.user);
+  const primaryHref = user ? "/issues" : installScriptUrl;
 
   return (
     <div className="relative min-h-full overflow-hidden bg-[#05070b] text-white">
@@ -41,17 +41,12 @@ export function LandingHero() {
             </p>
 
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-              <Link href={user ? "/issues" : "/login"} className={heroButtonClassName("solid")}>
-                {user ? t.header.dashboard : t.hero.cta}
-              </Link>
               <Link
-                href={githubUrl}
-                target="_blank"
-                rel="noreferrer"
-                className={heroButtonClassName("ghost")}
+                href={primaryHref}
+                className={heroButtonClassName("solid")}
+                {...(user ? {} : { target: "_blank", rel: "noreferrer" })}
               >
-                <GitHubMark className="size-4" />
-                GitHub
+                {user ? t.header.dashboard : t.hero.cta}
               </Link>
             </div>
 
@@ -95,8 +90,7 @@ export function LandingHero() {
   );
 }
 
-const INSTALL_COMMAND =
-  "curl -fsSL https://raw.githubusercontent.com/multica-ai/multica/main/scripts/install.sh | bash";
+const INSTALL_COMMAND = `curl -fsSL ${installScriptUrl} | bash`;
 
 function InstallCommand() {
   const [copied, setCopied] = useState(false);
