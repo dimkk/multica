@@ -1,0 +1,23 @@
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssh-server sudo ca-certificates curl git less docker.io \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN id -u ubuntu >/dev/null 2>&1 || useradd -m -s /bin/bash ubuntu \
+    && mkdir -p /var/run/sshd /home/ubuntu/.ssh \
+    && chown -R ubuntu:ubuntu /home/ubuntu/.ssh \
+    && chmod 700 /home/ubuntu/.ssh \
+    && printf 'ubuntu ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/ubuntu \
+    && chmod 440 /etc/sudoers.d/ubuntu \
+    && printf 'Port 2222\nPasswordAuthentication no\nPermitRootLogin no\nPubkeyAuthentication yes\nAuthorizedKeysFile .ssh/authorized_keys\n' > /etc/ssh/sshd_config.d/10-admin-ssh.conf
+
+COPY docker/admin-ssh/entrypoint.sh /entrypoint.sh
+
+WORKDIR /workspace
+
+EXPOSE 2222
+
+ENTRYPOINT ["/entrypoint.sh"]

@@ -80,7 +80,7 @@ Notes:
 - HAProxy owns public `:443` and forwards `ssh.aiathome.ru` to `wstunnel` using SNI
 - `ssh.aiathome.ru` is reserved for the operator SSH-over-TLS tunnel when `wstunnel` is enabled
 - everything else goes to the frontend
-- leave `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_WS_URL` empty so the frontend stays same-origin under the current host
+- leave `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_WS_URL` empty so the browser stays same-origin under the current host
 - Let's Encrypt uses the HTTP challenge, so port `80` must remain publicly reachable
 
 ## Production Login
@@ -143,9 +143,12 @@ Because inbound raw SSH is unreliable on this cloud, operator access is exposed 
 
 Server-side:
 
+- `Dockerfile.admin-ssh` builds a dedicated operator SSH container
 - `docker-compose.selfhost.caddy.yml` starts `ghcr.io/erebe/wstunnel:latest`
-- Caddy proxies `https://ssh.aiathome.ru` to the tunnel service
-- the tunnel is restricted to `127.0.0.1:22` on the VM
+- HAProxy routes `ssh.aiathome.ru` to `wstunnel` by SNI
+- `wstunnel` is restricted to `admin-ssh:2222`
+- the SSH shell lands in the `admin-ssh` container with `/workspace` mounted from `/opt/multica`
+- Docker socket is mounted, so `docker`, `docker compose`, and repo operations are available from that shell
 
 Client-side requirements:
 

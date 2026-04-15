@@ -17,11 +17,23 @@ services:
     restart: unless-stopped
     depends_on:
       - caddy
+      - admin-ssh
       - wstunnel
     ports:
       - "443:443"
     volumes:
       - ./deploy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+
+  admin-ssh:
+    build:
+      context: .
+      dockerfile: Dockerfile.admin-ssh
+    restart: unless-stopped
+    environment:
+      SSH_ADMIN_AUTHORIZED_KEY: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDOUVZZtIb1iOZxjRldxi/VTTMtenwVyFf5kN0uTlTn03pShx5vsMmP0aZqmyOyGKRXLtVvG2ssXWiH4BLQ2tk5BnVKwbU1MkVBiZL3aUTuQVHizyuPDSEEowiYNZbkfBeHG/Zku66HHE2hLbT67RLDorz7M/H5PHHKhRRv+uCiScQEt7OZRw1OOHQHXwSNITHSbksnXxGljwiUliPaay4EGT54aqNhug/CihLUo2Qaa4KT2M6KSEBwF+m5BkjMLe7zUNe3+MgKL5SeOwL+GJ0YI31ZOWdlxul8fCWoaoKMEG3wKrIQpAx4BZk0/spCFe7PKIShcVPqsuLjFPPPfs/3
+    volumes:
+      - .:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
 
   wstunnel:
     image: ghcr.io/erebe/wstunnel:latest
@@ -31,7 +43,7 @@ services:
       - -lc
       - >
         exec /home/app/wstunnel server
-        --restrict-to 127.0.0.1:22
+        --restrict-to admin-ssh:2222
         wss://0.0.0.0:8443
 
 volumes:
