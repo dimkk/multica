@@ -407,7 +407,9 @@ export class ApiClient {
   }
 
   async createAgent(data: CreateAgentRequest): Promise<Agent> {
-    return this.fetch("/api/agents", {
+    const search = new URLSearchParams();
+    if (this.workspaceId) search.set("workspace_id", this.workspaceId);
+    return this.fetch(`/api/agents?${search}`, {
       method: "POST",
       body: JSON.stringify(data),
     });

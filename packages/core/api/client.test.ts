@@ -106,4 +106,32 @@ describe("ApiClient", () => {
       { url: "https://api.example.test/api/autopilots/ap-1/triggers/tr-1", method: "DELETE" },
     ]);
   });
+
+  it("includes workspace_id when creating an agent", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(
+      new Response(JSON.stringify({ id: "agent-1" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new ApiClient("https://api.example.test");
+    client.setWorkspaceId("ws-123");
+
+    await client.createAgent({
+      name: "Test Agent",
+      runtime_id: "rt-1",
+      visibility: "private",
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(url).toBe("https://api.example.test/api/agents?workspace_id=ws-123");
+    expect(init?.method).toBe("POST");
+    expect(init?.body).toBe(JSON.stringify({
+      name: "Test Agent",
+      runtime_id: "rt-1",
+      visibility: "private",
+    }));
+  });
 });
