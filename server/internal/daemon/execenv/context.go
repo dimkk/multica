@@ -110,6 +110,41 @@ func writeSkillFiles(skillsDir string, skills []SkillContextForEnv) error {
 	return nil
 }
 
+// writeCodexSkillFiles writes Codex-native skills with the YAML frontmatter
+// required by the Codex skill loader. Workspace skills are stored as raw
+// markdown, so we add the minimal envelope here on write.
+func writeCodexSkillFiles(skillsDir string, skills []SkillContextForEnv) error {
+	if len(skills) == 0 {
+		return nil
+	}
+
+	formatted := make([]SkillContextForEnv, len(skills))
+	for i, skill := range skills {
+		formatted[i] = skill
+		formatted[i].Content = codexSkillContent(skill)
+	}
+
+	return writeSkillFiles(skillsDir, formatted)
+}
+
+func codexSkillContent(skill SkillContextForEnv) string {
+	content := strings.TrimLeft(skill.Content, "\ufeff \t\r\n")
+	if strings.HasPrefix(content, "---\n") || strings.HasPrefix(content, "---\r\n") {
+		return skill.Content
+	}
+
+	var b strings.Builder
+	b.WriteString("---\n")
+	fmt.Fprintf(&b, "name: %s\n", sanitizeSkillName(skill.Name))
+	fmt.Fprintf(&b, "description: Workspace skill %q\n", skill.Name)
+	b.WriteString("---\n\n")
+	b.WriteString(skill.Content)
+	if !strings.HasSuffix(skill.Content, "\n") {
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
 // renderIssueContext builds the markdown content for issue_context.md.
 func renderIssueContext(provider string, ctx TaskContextForEnv) string {
 	var b strings.Builder

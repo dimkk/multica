@@ -45,7 +45,12 @@ func prepareCodexHome(codexHome string, logger *slog.Logger) error {
 		src := filepath.Join(sharedHome, name)
 		dst := filepath.Join(codexHome, name)
 		if err := ensureDirSymlink(src, dst); err != nil {
-			logger.Warn("execenv: codex-home dir symlink failed", "dir", name, "error", err)
+			// If the link cannot be created (common on Windows without symlink
+			// privileges), fall back to a plain directory so Codex can still run.
+			if mkErr := os.MkdirAll(dst, 0o755); mkErr != nil {
+				logger.Warn("execenv: codex-home dir symlink failed", "dir", name, "error", err)
+				logger.Warn("execenv: codex-home dir fallback mkdir failed", "dir", name, "error", mkErr)
+			}
 		}
 	}
 
@@ -54,7 +59,12 @@ func prepareCodexHome(codexHome string, logger *slog.Logger) error {
 		src := filepath.Join(sharedHome, name)
 		dst := filepath.Join(codexHome, name)
 		if err := ensureSymlink(src, dst); err != nil {
-			logger.Warn("execenv: codex-home symlink failed", "file", name, "error", err)
+			// On Windows, symlinks can fail without Developer Mode or elevated
+			// privileges. Fall back to a plain file copy so Codex still has auth.
+			if copyErr := copyFileIfExists(src, dst); copyErr != nil {
+				logger.Warn("execenv: codex-home symlink failed", "file", name, "error", err)
+				logger.Warn("execenv: codex-home auth fallback copy failed", "file", name, "error", copyErr)
+			}
 		}
 	}
 
@@ -71,6 +81,13 @@ func prepareCodexHome(codexHome string, logger *slog.Logger) error {
 	// Codex needs network access to reach the Multica API (api.multica.ai).
 	if err := ensureCodexNetworkAccess(filepath.Join(codexHome, "config.toml")); err != nil {
 		logger.Warn("execenv: codex-home ensure network access failed", "error", err)
+	}
+	// The per-task config must not inherit the Windows "unelevated" sandbox:
+	// it forces PowerShell into ConstrainedLanguage mode and breaks networked
+	// helper commands inside exec_command. The task-specific config is isolated,
+	// so we can safely strip that override here.
+	if err := stripCodexWindowsUnelevatedSandbox(filepath.Join(codexHome, "config.toml")); err != nil {
+		logger.Warn("execenv: codex-home strip windows sandbox failed", "error", err)
 	}
 
 	return nil
@@ -190,6 +207,67 @@ func ensureCodexNetworkAccess(configPath string) error {
 	appendStr += "\n[sandbox_workspace_write]\nnetwork_access = true\n"
 
 	return os.WriteFile(configPath, append(data, []byte(appendStr)...), 0o644)
+}
+
+func stripCodexWindowsUnelevatedSandbox(configPath string) error {
+	data, err := os.ReadFile(configPath)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read config.toml: %w", err)
+	}
+
+	content := string(data)
+	if !strings.Contains(content, `[windows]`) || !strings.Contains(content, `sandbox = "unelevated"`) {
+		return nil
+	}
+
+	lines := strings.Split(content, "\n")
+	out := make([]string, 0, len(lines))
+	for i := 0; i < len(lines); {
+		line := lines[i]
+		if strings.TrimSpace(line) != "[windows]" {
+			out = append(out, line)
+			i++
+			continue
+		}
+
+		j := i + 1
+		section := []string{line}
+		for j < len(lines) {
+			trimmed := strings.TrimSpace(lines[j])
+			if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+				break
+			}
+			section = append(section, lines[j])
+			j++
+		}
+
+		filtered := make([]string, 0, len(section))
+		filtered = append(filtered, "[windows]")
+		for _, sectionLine := range section[1:] {
+			if strings.TrimSpace(sectionLine) == `sandbox = "unelevated"` {
+				continue
+			}
+			filtered = append(filtered, sectionLine)
+		}
+
+		keepSection := false
+		for _, sectionLine := range filtered[1:] {
+			trimmed := strings.TrimSpace(sectionLine)
+			if trimmed != "" && !strings.HasPrefix(trimmed, "#") {
+				keepSection = true
+				break
+			}
+		}
+		if keepSection {
+			out = append(out, filtered...)
+		}
+		i = j
+	}
+
+	return os.WriteFile(configPath, []byte(strings.Join(out, "\n")), 0o644)
 }
 
 // copyFileIfExists copies src to dst. If src doesn't exist, it's a no-op.

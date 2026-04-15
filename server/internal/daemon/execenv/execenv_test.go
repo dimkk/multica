@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -661,12 +662,17 @@ func TestPrepareCodexHomeSeedsFromShared(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sessions not found: %v", err)
 	}
-	if fi.Mode()&os.ModeSymlink == 0 {
-		t.Error("sessions should be a symlink")
-	}
-	sessTarget, _ := os.Readlink(sessionsPath)
-	if sessTarget != filepath.Join(sharedHome, "sessions") {
-		t.Errorf("sessions symlink target = %q, want %q", sessTarget, filepath.Join(sharedHome, "sessions"))
+	if runtime.GOOS == "windows" {
+		// Windows may expose directory junctions without the same mode bits as
+		// Unix symlinks. Existence is sufficient here.
+	} else {
+		if fi.Mode()&os.ModeSymlink == 0 {
+			t.Error("sessions should be a symlink")
+		}
+		sessTarget, _ := os.Readlink(sessionsPath)
+		if sessTarget != filepath.Join(sharedHome, "sessions") {
+			t.Errorf("sessions symlink target = %q, want %q", sessTarget, filepath.Join(sharedHome, "sessions"))
+		}
 	}
 
 	// auth.json should be a symlink.
@@ -675,12 +681,21 @@ func TestPrepareCodexHomeSeedsFromShared(t *testing.T) {
 	if err != nil {
 		t.Fatalf("auth.json not found: %v", err)
 	}
-	if fi.Mode()&os.ModeSymlink == 0 {
-		t.Error("auth.json should be a symlink")
-	}
-	target, _ := os.Readlink(authPath)
-	if target != filepath.Join(sharedHome, "auth.json") {
-		t.Errorf("auth.json symlink target = %q, want %q", target, filepath.Join(sharedHome, "auth.json"))
+	if runtime.GOOS == "windows" {
+		if fi.Mode()&os.ModeSymlink != 0 {
+			target, _ := os.Readlink(authPath)
+			if target != filepath.Join(sharedHome, "auth.json") {
+				t.Errorf("auth.json symlink target = %q, want %q", target, filepath.Join(sharedHome, "auth.json"))
+			}
+		}
+	} else {
+		if fi.Mode()&os.ModeSymlink == 0 {
+			t.Error("auth.json should be a symlink")
+		}
+		target, _ := os.Readlink(authPath)
+		if target != filepath.Join(sharedHome, "auth.json") {
+			t.Errorf("auth.json symlink target = %q, want %q", target, filepath.Join(sharedHome, "auth.json"))
+		}
 	}
 	// Verify content is accessible through symlink.
 	data, _ := os.ReadFile(authPath)
@@ -757,8 +772,13 @@ func TestPrepareCodexHomeSkipsMissingFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sessions not found: %v", err)
 	}
-	if fi.Mode()&os.ModeSymlink == 0 {
-		t.Error("sessions should be a symlink")
+	if runtime.GOOS == "windows" {
+		// Windows may expose directory junctions without the same mode bits as
+		// Unix symlinks. Existence is sufficient here.
+	} else {
+		if fi.Mode()&os.ModeSymlink == 0 {
+			t.Error("sessions should be a symlink")
+		}
 	}
 }
 
@@ -861,6 +881,43 @@ allow_commands = ["git"]
 	}
 }
 
+func TestStripCodexWindowsUnelevatedSandbox(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.toml")
+
+	existing := `model = "gpt-5.4"
+
+[windows]
+sandbox = "unelevated"
+
+[sandbox_workspace_write]
+network_access = true
+`
+	if err := os.WriteFile(configPath, []byte(existing), 0o644); err != nil {
+		t.Fatalf("write config.toml: %v", err)
+	}
+
+	if err := stripCodexWindowsUnelevatedSandbox(configPath); err != nil {
+		t.Fatalf("stripCodexWindowsUnelevatedSandbox failed: %v", err)
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read config.toml: %v", err)
+	}
+	s := string(data)
+	if strings.Contains(s, `sandbox = "unelevated"`) {
+		t.Fatalf("unexpected unelevated sandbox left in config: %q", s)
+	}
+	if strings.Contains(s, "[windows]") {
+		t.Fatalf("expected empty [windows] section to be removed, got %q", s)
+	}
+	if !strings.Contains(s, `[sandbox_workspace_write]`) || !strings.Contains(s, "network_access = true") {
+		t.Fatalf("lost workspace-write network config: %q", s)
+	}
+}
+
 func TestPrepareCodexHomeEnsuresNetworkAccess(t *testing.T) {
 	// Cannot use t.Parallel() with t.Setenv.
 
@@ -884,6 +941,75 @@ func TestPrepareCodexHomeEnsuresNetworkAccess(t *testing.T) {
 	}
 	if !strings.Contains(s, `sandbox_mode = "workspace-write"`) {
 		t.Error("config.toml missing sandbox_mode")
+	}
+}
+
+func TestPrepareCodexHomeStripsWindowsUnelevatedSandbox(t *testing.T) {
+	// Cannot use t.Parallel() with t.Setenv.
+
+	sharedHome := t.TempDir()
+	t.Setenv("CODEX_HOME", sharedHome)
+	if err := os.WriteFile(filepath.Join(sharedHome, "config.toml"), []byte(`model = "gpt-5.4"
+
+[windows]
+sandbox = "unelevated"
+`), 0o644); err != nil {
+		t.Fatalf("write shared config.toml: %v", err)
+	}
+
+	codexHome := filepath.Join(t.TempDir(), "codex-home")
+	if err := prepareCodexHome(codexHome, testLogger()); err != nil {
+		t.Fatalf("prepareCodexHome failed: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(codexHome, "config.toml"))
+	if err != nil {
+		t.Fatalf("read config.toml: %v", err)
+	}
+	s := string(data)
+	if strings.Contains(s, `sandbox = "unelevated"`) {
+		t.Fatalf("unexpected unelevated sandbox left in task config: %q", s)
+	}
+	if !strings.Contains(s, "network_access = true") {
+		t.Fatalf("config.toml missing network_access after sanitize: %q", s)
+	}
+}
+
+func TestPrepareCodexSkillsIncludeFrontmatter(t *testing.T) {
+	t.Parallel()
+
+	env, err := Prepare(PrepareParams{
+		WorkspacesRoot: t.TempDir(),
+		WorkspaceID:    "ws-codex-skills",
+		TaskID:         "c0d3x-sk1ll-t35t",
+		Provider:       "codex",
+		Task: TaskContextForEnv{
+			IssueID: "issue-codex-skill",
+			AgentSkills: []SkillContextForEnv{
+				{
+					Name:    "Docker",
+					Content: "# Docker\n\nUse docker compose for local self-hosted workflows.\n",
+				},
+			},
+		},
+	}, testLogger())
+	if err != nil {
+		t.Fatalf("Prepare failed: %v", err)
+	}
+	defer env.Cleanup(true)
+
+	data, err := os.ReadFile(filepath.Join(env.CodexHome, "skills", "docker", "SKILL.md"))
+	if err != nil {
+		t.Fatalf("failed to read codex SKILL.md: %v", err)
+	}
+	s := string(data)
+	if !strings.HasPrefix(s, "---\n") {
+		t.Fatalf("expected codex skill frontmatter, got %q", s)
+	}
+	for _, want := range []string{"name: docker", "description:", "# Docker"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("codex SKILL.md missing %q", want)
+		}
 	}
 }
 
@@ -949,9 +1075,11 @@ func TestEnsureSymlinkRepairsBrokenLink(t *testing.T) {
 	}
 
 	// Should now point to src.
-	target, _ := os.Readlink(dst)
-	if target != src {
-		t.Errorf("symlink target = %q, want %q", target, src)
+	if runtime.GOOS != "windows" {
+		target, _ := os.Readlink(dst)
+		if target != src {
+			t.Errorf("symlink target = %q, want %q", target, src)
+		}
 	}
 	data, _ := os.ReadFile(dst)
 	if string(data) != "real" {

@@ -114,7 +114,7 @@ func Prepare(params PrepareParams, logger *slog.Logger) (*Environment, error) {
 			return nil, fmt.Errorf("execenv: prepare codex-home: %w", err)
 		}
 		if len(params.Task.AgentSkills) > 0 {
-			if err := writeSkillFiles(filepath.Join(codexHome, "skills"), params.Task.AgentSkills); err != nil {
+			if err := writeCodexSkillFiles(filepath.Join(codexHome, "skills"), params.Task.AgentSkills); err != nil {
 				return nil, fmt.Errorf("execenv: write codex skills: %w", err)
 			}
 		}
