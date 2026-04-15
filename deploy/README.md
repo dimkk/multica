@@ -39,12 +39,13 @@ It is not the active production path because inbound SSH on this cloud is unreli
 
 ## HTTPS Edge
 
-The recommended edge is `Caddy + Let's Encrypt`, not a static certificate and not the earlier Traefik label-based overlay.
+The recommended edge is `Caddy + HAProxy + wstunnel`, not a static certificate and not the earlier Traefik label-based overlay.
 
 Files:
 
 - `docker-compose.selfhost.caddy.yml`
 - `deploy/Caddyfile`
+- `deploy/haproxy.cfg`
 - `deploy/selfhost.caddy.env.example`
 
 One-time server setup:
@@ -61,7 +62,6 @@ Recommended `.env.caddy` values for the live host:
 ```bash
 PUBLIC_DOMAIN=app.aiathome.ru
 LETSENCRYPT_EMAIL=d-volkovsky@yandex.ru
-SSH_TUNNEL_DOMAIN=ssh.aiathome.ru
 APP_ENV=production
 MASTER_LOGIN_CODE=
 FRONTEND_ORIGIN=https://app.aiathome.ru
@@ -76,7 +76,8 @@ NEXT_PUBLIC_WS_URL=
 
 Notes:
 
-- Caddy terminates TLS and routes `/api`, `/auth`, `/health`, `/ws`, and `/uploads` to the backend
+- Caddy terminates TLS for `app.aiathome.ru` and routes `/api`, `/auth`, `/health`, `/ws`, and `/uploads` to the backend
+- HAProxy owns public `:443` and forwards `ssh.aiathome.ru` to `wstunnel` using SNI
 - `ssh.aiathome.ru` is reserved for the operator SSH-over-TLS tunnel when `wstunnel` is enabled
 - everything else goes to the frontend
 - leave `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_WS_URL` empty so the frontend stays same-origin under the current host

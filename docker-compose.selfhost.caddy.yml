@@ -4,15 +4,24 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
-      - "443:443"
     environment:
       PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?set PUBLIC_DOMAIN}
       LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL:?set LETSENCRYPT_EMAIL}
-      SSH_TUNNEL_DOMAIN: ${SSH_TUNNEL_DOMAIN:-ssh.aiathome.ru}
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
+
+  haproxy:
+    image: haproxy:3.2-alpine
+    restart: unless-stopped
+    depends_on:
+      - caddy
+      - wstunnel
+    ports:
+      - "443:443"
+    volumes:
+      - ./deploy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
 
   wstunnel:
     image: ghcr.io/erebe/wstunnel:latest
@@ -23,7 +32,7 @@ services:
       - >
         exec /home/app/wstunnel server
         --restrict-to 127.0.0.1:22
-        ws://0.0.0.0:8081
+        wss://0.0.0.0:8443
 
 volumes:
   caddy-data:
